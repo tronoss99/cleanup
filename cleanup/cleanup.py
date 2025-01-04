@@ -1,28 +1,36 @@
 import pymysql
 import os
 from datetime import datetime, timedelta
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def get_env_variable(var_name, default=None, required=False):
+    value = os.environ.get(var_name, default)
+    if required and not value:
+        raise ValueError(f"La variable de entorno {var_name} es requerida pero no está definida.")
+    return value
 
 def cleanup_inactive_devices():
-    DB_HOST = os.environ.get('DB_HOST')
-    DB_USER = os.environ.get('DB_USER')
-    DB_PASSWORD = os.environ.get('DB_PASSWORD')
-    DB_NAME = os.environ.get('DB_NAME')
-    DB_PORT = int(os.environ.get('DB_PORT', 3306))
-    TIMEOUT_MINUTES = int(os.environ.get('TIMEOUT_MINUTES', 2))
-    
-    connection = pymysql.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        port=DB_PORT,
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    DB_HOST = get_env_variable('DB_HOST', required=True)
+    DB_USER = get_env_variable('DB_USER', required=True)
+    DB_PASSWORD = get_env_variable('DB_PASSWORD', required=True)
+    DB_NAME = get_env_variable('DB_NAME', required=True)
+    DB_PORT = int(get_env_variable('DB_PORT', 3306))
+    TIMEOUT_MINUTES = int(get_env_variable('TIMEOUT_MINUTES', 2))
 
     try:
+        connection = pymysql.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            port=DB_PORT,
+            cursorclass=pymysql.cursors.DictCursor
+        )
         with connection.cursor() as cursor:
             threshold_time = datetime.now() - timedelta(minutes=TIMEOUT_MINUTES)
-            
             select_query = """
                 SELECT device_id, user_id FROM devices
                 WHERE last_ping < %s
@@ -31,7 +39,7 @@ def cleanup_inactive_devices():
             inactive_devices = cursor.fetchall()
             
             if not inactive_devices:
-                print("No hay dispositivos inactivos para limpiar.")
+                logger.info("No hay dispositivos inactivos para limpiar.")
                 return
             
             for device in inactive_devices:
@@ -51,14 +59,17 @@ def cleanup_inactive_devices():
                 """
                 cursor.execute(update_query, (user_id,))
                 
-                print(f"Dispositivo {device_id} del usuario {user_id} eliminado.")
+                logger.info(f"Dispositivo {device_id} del usuario {user_id} eliminado correctamente.")
             
             connection.commit()
-            print(f"Se limpiaron {len(inactive_devices)} dispositivos inactivos.")
+            logger.info(f"Se limpiaron {len(inactive_devices)} dispositivos inactivos.")
+    except pymysql.MySQLError as e:
+        logger.error(f"Error durante la limpieza: {e}")
     except Exception as e:
-        print(f"Error durante la limpieza: {e}")
+        logger.error(f"Error inesperado: {e}")
     finally:
-        connection.close()
+        if 'connection' in locals() and connection:
+            connection.close()
 
 if __name__ == "__main__":
     cleanup_inactive_devices()
