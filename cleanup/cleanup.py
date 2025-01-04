@@ -8,7 +8,7 @@ def cleanup_inactive_devices():
     DB_PASSWORD = os.environ.get('DB_PASSWORD')
     DB_NAME = os.environ.get('DB_NAME')
     DB_PORT = int(os.environ.get('DB_PORT', 3306))
-    TIMEOUT_MINUTES = int(os.environ.get('TIMEOUT_MINUTES', 10))
+    TIMEOUT_MINUTES = int(os.environ.get('TIMEOUT_MINUTES', 2))
     
     connection = pymysql.connect(
         host=DB_HOST,
